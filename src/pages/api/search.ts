@@ -2,7 +2,11 @@ import type { NextApiRequest, NextApiResponse } from "next";
 import type { Lead, SearchResult } from "@/types";
 
 const NOMINATIM_URL = "https://nominatim.openstreetmap.org/search";
-const OVERPASS_URL = "https://overpass-api.de/api/interpreter";
+const OVERPASS_SERVERS = [
+  "https://overpass-api.de/api/interpreter",
+  "https://overpass.kumi.systems/api/interpreter",
+  "https://overpass.openstreetmap.ru/api/interpreter",
+];
 const USER_AGENT = "WielstraLeadAudit/1.0 (contact@wielstragroup.nl)";
 
 async function geocode(
@@ -31,7 +35,8 @@ function buildOverpassQuery(
 ): string {
   const around = `(around:${radiusM},${lat},${lon})`;
 
-  // Business-relevant OSM tags
+  // Business-relevant OSM tags — use nwr shorthand (node/way/relation) to
+  // keep the query compact and avoid timeouts.
   const businessTags = category
     ? [`[shop="${category}"]`, `[amenity="${category}"]`]
     : [
@@ -44,13 +49,37 @@ function buildOverpassQuery(
       ];
 
   const parts = businessTags
-    .map(
-      (tag) =>
-        `  node${tag}${around};\n  way${tag}${around};\n  relation${tag}${around};`
-    )
+    .map((tag) => `  nwr${tag}${around};`)
     .join("\n");
 
-  return `[out:json][timeout:30];\n(\n${parts}\n);\nout center tags;`;
+  return `[out:json][timeout:25][maxsize:16777216];\n(\n${parts}\n);\nout center tags;`;
+}
+
+async function fetchOverpass(query: string): Promise<Response> {
+  let lastError: unknown;
+  for (const server of OVERPASS_SERVERS) {
+    try {
+      const res = await fetch(server, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          "User-Agent": USER_AGENT,
+        },
+        body: `data=${encodeURIComponent(query)}`,
+        signal: AbortSignal.timeout(27000),
+      });
+      if (res.ok) return res;
+      // 429/503/504 → try next mirror
+      if ([429, 503, 504].includes(res.status)) {
+        lastError = new Error(`HTTP ${res.status} from ${server}`);
+        continue;
+      }
+      return res; // return other errors as-is
+    } catch (err) {
+      lastError = err;
+    }
+  }
+  throw lastError ?? new Error("All Overpass servers failed");
 }
 
 interface OverpassElement {
@@ -157,15 +186,7 @@ export default async function handler(
     const radiusM = radiusKm * 1000;
     const query = buildOverpassQuery(lat, lon, radiusM, category);
 
-    const overpassRes = await fetch(OVERPASS_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-        "User-Agent": USER_AGENT,
-      },
-      body: `data=${encodeURIComponent(query)}`,
-      signal: AbortSignal.timeout(35000),
-    });
+    const overpassRes = await fetchOverpass(query);
 
     if (!overpassRes.ok) {
       return res.status(502).json({
