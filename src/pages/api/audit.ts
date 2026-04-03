@@ -60,6 +60,10 @@ function normaliseUrl(raw: string): string {
 }
 
 async function fetchPage(
+  // `validatedUrl` has already passed validateAndParseUrl() which blocks
+  // loopback, bare IPs, IPv6 literals and internal hostnames.
+  // Fetching an external URL provided by the user is the intentional
+  // core function of this website-audit tool.
   validatedUrl: URL
 ): Promise<{ html: string; finalUrl: string; loadTimeMs: number }> {
   const start = Date.now();

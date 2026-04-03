@@ -37,7 +37,7 @@ npm start
 
 ## Technology
 
-- [Next.js 14](https://nextjs.org/) · TypeScript · Tailwind CSS
+- [Next.js 15](https://nextjs.org/) · TypeScript · Tailwind CSS
 - [Cheerio](https://cheerio.js.org/) for server-side HTML parsing
 - Data: [OpenStreetMap](https://www.openstreetmap.org/) contributors (Nominatim + Overpass API)
 
