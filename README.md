@@ -35,6 +35,27 @@ npm run build
 npm start
 ```
 
+## Deploy to Vercel (aanbevolen)
+
+De makkelijkste manier om de app online te zetten:
+
+1. Ga naar [vercel.com](https://vercel.com) en maak een gratis account aan (of log in met GitHub).
+2. Klik op **"Add New Project"** → **"Import Git Repository"**.
+3. Selecteer de repo `wielstragroup/wielstra-lead-audit`.
+4. Kies als **branch** `mvp` (of `main`).
+5. Vercel detecteert automatisch Next.js — klik op **"Deploy"**.
+6. Na ~1 minuut is je app live op een `*.vercel.app` URL.
+
+> **Tip:** Om de app privé te houden (alleen jijzelf), ga naar *Project Settings → Deployment Protection* en schakel **Vercel Authentication** in. Dan moet je inloggen met je Vercel-account voordat je de app kunt zien.
+
+### Problemen? Controleer dit
+
+| Probleem | Oplossing |
+|---|---|
+| 404 NOT_FOUND op Vercel-URL | Het project is nog niet gedeployed. Volg de stappen hierboven. |
+| Build mislukt | Controleer de Vercel build logs. Zorg dat `npm run build` lokaal werkt. |
+| Geen resultaten bij zoeken | De Overpass/Nominatim API is tijdelijk langzaam. Probeer opnieuw. |
+
 ## Technology
 
 - [Next.js 15](https://nextjs.org/) · TypeScript · Tailwind CSS
