@@ -37,22 +37,25 @@ function buildOverpassQuery(
 
   // Business-relevant OSM tags — use nwr shorthand (node/way/relation) to
   // keep the query compact and avoid timeouts.
+  // Use [amenity] without a value filter so no amenity type is missed; non-
+  // business amenities (bench, parking, etc.) are stripped in extractLead().
   const businessTags = category
     ? [`[shop="${category}"]`, `[amenity="${category}"]`]
     : [
         "[shop]",
-        "[amenity~'restaurant|cafe|bar|hotel|guest_house|doctors|dentist|veterinary|pharmacy|optician|hairdresser|beauty|bank|bureau_de_change|car_wash|car_rental|car_repair|fuel|cinema|theatre|gym|sports_centre|swimming_pool|spa|massage']",
+        "[amenity]",
         "[office]",
         "[craft]",
         "[tourism~'hotel|guest_house|motel|hostel|bed_and_breakfast|attraction|museum|gallery']",
-        "[leisure~'fitness_centre|sports_centre|swimming_pool']",
+        "[leisure~'fitness_centre|sports_centre|swimming_pool|stadium|golf_course']",
+        "[healthcare]",
       ];
 
   const parts = businessTags
     .map((tag) => `  nwr${tag}${around};`)
     .join("\n");
 
-  return `[out:json][timeout:25][maxsize:16777216];\n(\n${parts}\n);\nout center tags;`;
+  return `[out:json][timeout:25][maxsize:33554432];\n(\n${parts}\n);\nout center tags;`;
 }
 
 async function fetchOverpass(query: string): Promise<Response> {
@@ -95,10 +98,49 @@ interface OverpassResponse {
   elements: OverpassElement[];
 }
 
+// Amenity values that represent infrastructure/furniture, not businesses.
+const NON_BUSINESS_AMENITIES = new Set([
+  "bench",
+  "waste_basket",
+  "waste_disposal",
+  "recycling",
+  "bicycle_parking",
+  "bicycle_rental",
+  "motorcycle_parking",
+  "parking",
+  "parking_space",
+  "parking_entrance",
+  "bus_station",
+  "bus_stop",
+  "taxi",
+  "ferry_terminal",
+  "charging_station",
+  "toilets",
+  "shower",
+  "drinking_water",
+  "water_point",
+  "fountain",
+  "telephone",
+  "post_box",
+  "vending_machine",
+  "clock",
+  "shelter",
+  "post_depot",
+  "loading_dock",
+  "grit_bin",
+  "fire_hydrant",
+  "emergency_phone",
+  "compressed_air",
+]);
+
 function extractLead(el: OverpassElement): Lead | null {
   const tags = el.tags ?? {};
   const name = tags["name"];
   if (!name || name.trim() === "") return null;
+
+  // Drop infrastructure amenities that are not businesses.
+  const amenityVal = tags["amenity"];
+  if (amenityVal && NON_BUSINESS_AMENITIES.has(amenityVal)) return null;
 
   const lat = el.lat ?? el.center?.lat;
   const lon = el.lon ?? el.center?.lon;
@@ -204,9 +246,8 @@ export default async function handler(
     for (const el of overpassData.elements) {
       const lead = extractLead(el);
       if (!lead) continue;
-      const key = lead.name.toLowerCase();
-      if (seen.has(key)) continue;
-      seen.add(key);
+      if (seen.has(lead.id)) continue;
+      seen.add(lead.id);
       leads.push(lead);
     }
 
