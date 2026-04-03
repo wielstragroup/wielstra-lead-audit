@@ -55,7 +55,7 @@ function buildOverpassQuery(
     .map((tag) => `  nwr${tag}${around};`)
     .join("\n");
 
-  return `[out:json][timeout:25][maxsize:33554432];\n(\n${parts}\n);\nout center tags;`;
+  return `[out:json][timeout:60][maxsize:67108864];\n(\n${parts}\n);\nout center tags;`;
 }
 
 async function fetchOverpass(query: string): Promise<Response> {
@@ -69,7 +69,7 @@ async function fetchOverpass(query: string): Promise<Response> {
           "User-Agent": USER_AGENT,
         },
         body: `data=${encodeURIComponent(query)}`,
-        signal: AbortSignal.timeout(27000),
+        signal: AbortSignal.timeout(65000),
       });
       if (res.ok) return res;
       // 429/503/504 → try next mirror
@@ -96,6 +96,7 @@ interface OverpassElement {
 
 interface OverpassResponse {
   elements: OverpassElement[];
+  remark?: string;
 }
 
 // Amenity values that represent infrastructure/furniture, not businesses.
@@ -240,6 +241,19 @@ export default async function handler(
     }
 
     const overpassData = (await overpassRes.json()) as OverpassResponse;
+
+    // Overpass returns HTTP 200 with an empty elements array and a `remark`
+    // field when the query times out or exceeds memory limits.  Surface this
+    // as a user-visible error instead of silently returning zero leads.
+    if (overpassData.remark && overpassData.elements.length === 0) {
+      return res.status(502).json({
+        leads: [],
+        centerLat: lat,
+        centerLon: lon,
+        error: `Overpass API error: ${overpassData.remark}. Try a smaller radius or a more specific category.`,
+      });
+    }
+
     const seen = new Set<string>();
     const leads: Lead[] = [];
 
